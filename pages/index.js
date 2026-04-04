@@ -242,6 +242,7 @@ export default function Home() {
       todayIn: 0, todayOut: 0,
       finePaid: [false,false,false,false,false,false],
       selectedPirates: [],
+      totalRounds: 0,
     }
     setG(newG)
     setManualVals([0,0,0,0,0,0])
@@ -249,7 +250,7 @@ export default function Home() {
     await fetch('/api/reset', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ combo_stats: G.comboStats, gold_amount: G.goldAmount })
+      body: JSON.stringify({ combo_stats: G.comboStats, gold_amount: G.goldAmount, total_rounds: 0 })
     })
   }
 
