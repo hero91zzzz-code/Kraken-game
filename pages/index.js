@@ -54,7 +54,7 @@ export default function Home() {
     const d = await r.json()
     const s = d.state
     if (s && s.id) {
-      setG({
+      setG(prev => ({
         totalChips: s.total_chips || [0,0,0,0,0,0],
         todayChips: s.today_chips || [0,0,0,0,0,0],
         todayGames: s.today_games || 0,
@@ -65,12 +65,12 @@ export default function Home() {
         personal: s.personal || initPersonal(),
         comboStats: s.combo_stats || {},
         totalRounds: s.total_rounds || 0,
-        selectedPirates: [],
+        selectedPirates: prev.selectedPirates || [],
         goldAmount: s.gold_amount || 0,
         todayIn: s.today_in || 0,
         todayOut: s.today_out || 0,
         finePaid: s.fine_paid || [false,false,false,false,false,false],
-      })
+      }))
       setManualVals(s.today_chips || [0,0,0,0,0,0])
     }
     setGameLogs(d.gameLogs || [])
