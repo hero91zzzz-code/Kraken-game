@@ -175,6 +175,62 @@ export default function Home() {
     await saveState(newG, log)
   }
 
+
+  async function undoLastGame() {
+    const ok = window.confirm('방금 입력한 게임 결과를 취소할까요?')
+    if (!ok) return
+
+    const r = await fetch('/api/undo-last-game', { method: 'POST' })
+    const d = await r.json()
+
+    if (!r.ok || !d?.ok) {
+      showToast(d?.error || '되돌리기에 실패했어요')
+      return
+    }
+
+    const s = d.state || {}
+    const restored = d.restoredPirates || []
+
+    setG(prev => ({
+      ...prev,
+      totalChips: s.total_chips || [0,0,0,0,0,0],
+      todayChips: s.today_chips || [0,0,0,0,0,0],
+      todayGames: s.today_games || 0,
+      todayPW: s.today_pw || 0,
+      todayEW: s.today_ew || 0,
+      pirates: { w: s.pirates_w || 0, l: s.pirates_l || 0 },
+      explore: { w: s.explore_w || 0, l: s.explore_l || 0 },
+      personal: s.personal || initPersonal(),
+      comboStats: s.combo_stats || {},
+      totalRounds: s.total_rounds || 0,
+      selectedPirates: restored,
+      goldAmount: s.gold_amount || 0,
+      todayIn: s.today_in || 0,
+      todayOut: s.today_out || 0,
+      finePaid: s.fine_paid || [false,false,false,false,false,false],
+    }))
+    setManualVals(s.today_chips || [0,0,0,0,0,0])
+    setGameLogs(d.gameLogs || [])
+    showToast('방금 결과를 되돌렸어요')
+  }
+
+  async function resetComboStats() {
+    const ok = window.confirm('정말 조합 데이터를 모두 초기화할까요?\n이 작업은 되돌릴 수 없습니다.')
+    if (!ok) return
+
+    const newG = {
+      ...G,
+      comboStats: {},
+    }
+
+    setG(newG)
+    setComboSelected([])
+    setExploreExpanded(false)
+    setPirateExpanded(false)
+    showToast('조합 데이터 초기화 완료!')
+    await saveState(newG)
+  }
+
   async function doReset() {
     setShowResetModal(false)
     const newG = {
@@ -376,12 +432,16 @@ export default function Home() {
                 </div>
               </div>
               <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>② 결과 입력</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                 <button onClick={()=>submitResult('pirates')} style={{padding:'16px 10px',borderRadius:10,border:'none',cursor:'pointer',background:'#fef2f2',color:'#a32d2d',fontSize:14,fontWeight:500,lineHeight:1.4}}>🏴‍☠️ 해적<br/>승리</button>
                 <button onClick={()=>submitResult('explore')} style={{padding:'16px 10px',borderRadius:10,border:'none',cursor:'pointer',background:'#e1f5ee',color:'#085041',fontSize:14,fontWeight:500,lineHeight:1.4}}>🧭 탐험대<br/>승리</button>
               </div>
+              <button onClick={undoLastGame} style={{width:'100%',padding:'12px 10px',borderRadius:10,border:'0.5px solid #d1d5db',background:'#fff',color:'#374151',fontSize:13,fontWeight:500,cursor:'pointer'}}>↩️ 방금 결과 취소</button>
             </div>
           </>}
+          {G.selectedPirates.length!==2 && <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
+            <button onClick={undoLastGame} style={{width:'100%',padding:'12px 10px',borderRadius:10,border:'0.5px solid #d1d5db',background:'#fff',color:'#374151',fontSize:13,fontWeight:500,cursor:'pointer'}}>↩️ 방금 결과 취소</button>
+          </div>}
           {G.selectedPirates.length===0 && <div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>해적 2명을 선택해주세요</div>}
           {G.selectedPirates.length===1 && <div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>{NAMES[G.selectedPirates[0]]} 선택됨 — 1명 더 선택하세요</div>}
         </>}
@@ -450,6 +510,24 @@ export default function Home() {
 
         {/* 조합 탭 */}
         {tab==='combo' && <>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase'}}>조합 통계</div>
+            <button
+              onClick={resetComboStats}
+              style={{
+                padding:'7px 12px',
+                borderRadius:8,
+                border:'0.5px solid #fca5a5',
+                background:'none',
+                color:'#a32d2d',
+                fontSize:12,
+                fontWeight:500,
+                cursor:'pointer'
+              }}
+            >
+              조합 초기화
+            </button>
+          </div>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>2명 선택 → 조합 승률</div>
             <div style={{fontSize:12,color:'#6b7280',marginBottom:12,padding:'8px 10px',background:'#f9fafb',borderRadius:8}}>두 명을 탭하면 전체/탐험대/해적 승률이 나와요</div>
