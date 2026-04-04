@@ -50,33 +50,35 @@ export default function Home() {
   }, [])
 
   const fetchState = useCallback(async () => {
-    const r = await fetch('/api/state')
-    const d = await r.json()
-    const s = d.state
-    if (s && s.id) {
-      setG(prev => ({
-        totalChips: s.total_chips || [0,0,0,0,0,0],
-        todayChips: s.today_chips || [0,0,0,0,0,0],
-        todayGames: s.today_games || 0,
-        todayPW: s.today_pw || 0,
-        todayEW: s.today_ew || 0,
-        pirates: {w: s.pirates_w||0, l: s.pirates_l||0},
-        explore: {w: s.explore_w||0, l: s.explore_l||0},
-        personal: s.personal || initPersonal(),
-        comboStats: s.combo_stats || {},
-        totalRounds: s.total_rounds || 0,
-        selectedPirates: prev.selectedPirates || [],
-        goldAmount: s.gold_amount || 0,
-        todayIn: s.today_in || 0,
-        todayOut: s.today_out || 0,
-        finePaid: s.fine_paid || [false,false,false,false,false,false],
-      }))
-      setManualVals(s.today_chips || [0,0,0,0,0,0])
-    }
-    setGameLogs(d.gameLogs || [])
-    setGoldLogs(d.goldLogs || [])
-    setLoading(false)
-  }, [])
+  const r = await fetch('/api/state')
+  const d = await r.json()
+  const s = d.state
+
+  if (s && s.id) {
+    setG(prev => ({
+      totalChips: s.total_chips || [0,0,0,0,0,0],
+      todayChips: s.today_chips || [0,0,0,0,0,0],
+      todayGames: s.today_games || 0,
+      todayPW: s.today_pw || 0,
+      todayEW: s.today_ew || 0,
+      pirates: { w: s.pirates_w || 0, l: s.pirates_l || 0 },
+      explore: { w: s.explore_w || 0, l: s.explore_l || 0 },
+      personal: s.personal || initPersonal(),
+      comboStats: s.combo_stats || {},
+      totalRounds: s.total_rounds || 0,
+      selectedPirates: prev.selectedPirates || [],
+      goldAmount: s.gold_amount || 0,
+      todayIn: s.today_in || 0,
+      todayOut: s.today_out || 0,
+      finePaid: s.fine_paid || [false,false,false,false,false,false],
+    }))
+    setManualVals(s.today_chips || [0,0,0,0,0,0])
+  }
+
+  setGameLogs(d.gameLogs || [])
+  setGoldLogs(d.goldLogs || [])
+  setLoading(false)
+}, [])
 
   useEffect(() => {
     fetchState()
