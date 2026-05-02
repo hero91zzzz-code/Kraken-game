@@ -93,9 +93,8 @@ export default function Home() {
 
   useEffect(() => {
     fetchState()
-    const iv = setInterval(fetchState, 8000)
-    return () => clearInterval(iv)
-  }, [fetchState])
+    // 자동 새로고침 제거 — 탭 전환 시에만 fetch
+  }, [])
 
   const saveState = useCallback(async (newG, gameLog = null, goldLog = null) => {
     if (isSaving.current) return // 중복 저장 방지
@@ -189,9 +188,13 @@ export default function Home() {
     setG(newG)
     setManualVals(dc)
     selectedPiratesRef.current = []
-    setGameLogs(prev => [log, ...prev])
     showToast((winner==='pirates'?'🏴‍☠️ 해적 승리':'🧭 탐험대 승리') + ' — 진 팀 +3칩')
     await saveState(newG, log)
+    lastSaveTime.current = Date.now()
+    const r = await fetch('/api/state')
+    const d = await r.json()
+    setGameLogs(d.gameLogs || [])
+    setGoldLogs(d.goldLogs || [])
   }
 
   async function doReset() {
@@ -238,9 +241,12 @@ export default function Home() {
     const log = {type:'add', label:NAMES[i]+' 벌금 납부', amount:fine, ts}
     const newG = {...G, finePaid:newFP, goldAmount:G.goldAmount+fine, todayIn:G.todayIn+fine}
     setG(newG)
-    setGoldLogs(prev => [log, ...prev])
     showToast(NAMES[i]+' '+won(fine)+' 납부!')
     await saveState(newG, null, log)
+    lastSaveTime.current = Date.now()
+    const r = await fetch('/api/state')
+    const d = await r.json()
+    setGoldLogs(d.goldLogs || [])
   }
 
   async function payAllFine() {
@@ -253,9 +259,12 @@ export default function Home() {
     const log = {type:'add', label:'전액 납부 ('+count+'명)', amount:total, ts}
     const newG = {...G, finePaid:newFP, goldAmount:G.goldAmount+total, todayIn:G.todayIn+total}
     setG(newG)
-    setGoldLogs(prev => [log, ...prev])
     showToast('💰 '+won(total)+' 전액 납부!')
     await saveState(newG, null, log)
+    lastSaveTime.current = Date.now()
+    const r = await fetch('/api/state')
+    const d = await r.json()
+    setGoldLogs(d.goldLogs || [])
   }
 
   async function manualDeposit() {
@@ -266,10 +275,14 @@ export default function Home() {
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
     const log = {type:'add', label, amount:amt, ts}
     const newG = {...G, goldAmount:G.goldAmount+amt, todayIn:G.todayIn+amt}
-    setG(newG); setGoldLogs(prev => [log, ...prev])
+    setG(newG)
     setDepositLabel(''); setDepositAmt('')
     showToast(label+' '+won(amt)+' 입금!')
     await saveState(newG, null, log)
+    lastSaveTime.current = Date.now()
+    const r = await fetch('/api/state')
+    const d = await r.json()
+    setGoldLogs(d.goldLogs || [])
   }
 
   async function spendFromGold() {
@@ -282,10 +295,14 @@ export default function Home() {
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
     const log = {type:'spend', label:spendName+' — '+spendLabel.trim(), amount:amt, ts}
     const newG = {...G, goldAmount:G.goldAmount-amt, todayOut:G.todayOut+amt}
-    setG(newG); setGoldLogs(prev => [log, ...prev])
+    setG(newG)
     setSpendLabel(''); setSpendAmt(''); setSpendName(null)
     showToast(spendName+' '+spendLabel+' '+won(amt)+' 차감')
     await saveState(newG, null, log)
+    lastSaveTime.current = Date.now()
+    const r = await fetch('/api/state')
+    const d = await r.json()
+    setGoldLogs(d.goldLogs || [])
   }
 
   function renderComboRanking(entries, color, expanded, team) {
@@ -362,7 +379,7 @@ export default function Home() {
         </div>
         <div style={{display:'flex'}}>
           {[['record','기록'],['today','오늘'],['stats','통계'],['combo','조합'],['manual','수동'],['gold','금고']].map(([id,label])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'10px 0',fontSize:11,textAlign:'center',border:'none',background:'none',cursor:'pointer',color:tab===id?'#111':'#9ca3af',borderBottom:tab===id?'2px solid #111':'2px solid transparent',fontWeight:tab===id?500:400,fontFamily:'inherit'}}>{label}</button>
+            <button key={id} onClick={()=>{ setTab(id); if(selectedPiratesRef.current.length===0) fetchState() }} style={{flex:1,padding:'10px 0',fontSize:11,textAlign:'center',border:'none',background:'none',cursor:'pointer',color:tab===id?'#111':'#9ca3af',borderBottom:tab===id?'2px solid #111':'2px solid transparent',fontWeight:tab===id?500:400,fontFamily:'inherit'}}>{label}</button>
           ))}
         </div>
       </div>
