@@ -7,11 +7,10 @@ const FG = ['#1d4ed8','#be185d','#15803d','#b91c1c','#7e22ce','#854d0e']
 const CHIP_VAL = 1000
 
 function pill(i, n) {
-  return <span style={{display:'inline-block',padding:'5px 12px',borderRadius:20,fontSize:13,fontWeight:500,background:BG[i],color:FG[i]}}>{n}</span>
+  return <span key={i} style={{display:'inline-block',padding:'5px 12px',borderRadius:20,fontSize:13,fontWeight:500,background:BG[i],color:FG[i]}}>{n}</span>
 }
 function won(n) { return Math.round(n).toLocaleString() + '원' }
 function pct(w, l) { const t = w + l; return t ? Math.round(w / t * 100) : null }
-
 const initPersonal = () => Array(6).fill(null).map(() => ({pw:0,pl:0,ew:0,el:0}))
 
 export default function Home() {
@@ -23,16 +22,16 @@ export default function Home() {
   const [exploreExpanded, setExploreExpanded] = useState(false)
   const [pirateExpanded, setPirateExpanded] = useState(false)
 
+  // 저장 중 여부 — 중복 방지 핵심
+  const isSaving = useRef(false)
+  const lastSaveTime = useRef(0)
+
   const [G, setG] = useState({
-    totalChips: [0,0,0,0,0,0],
-    todayChips: [0,0,0,0,0,0],
+    totalChips: [0,0,0,0,0,0], todayChips: [0,0,0,0,0,0],
     todayGames: 0, todayPW: 0, todayEW: 0,
     pirates: {w:0,l:0}, explore: {w:0,l:0},
-    personal: initPersonal(),
-    comboStats: {},
-    totalRounds: 0,
-    selectedPirates: [],
-    goldAmount: 0, todayIn: 0, todayOut: 0,
+    personal: initPersonal(), comboStats: {}, totalRounds: 0,
+    selectedPirates: [], goldAmount: 0, todayIn: 0, todayOut: 0,
     finePaid: [false,false,false,false,false,false],
   })
   const [gameLogs, setGameLogs] = useState([])
@@ -49,35 +48,46 @@ export default function Home() {
     setTimeout(() => setToast(null), 2400)
   }, [])
 
+  const parseState = useCallback((s) => ({
+    totalChips: s.total_chips || [0,0,0,0,0,0],
+    todayChips: s.today_chips || [0,0,0,0,0,0],
+    todayGames: s.today_games || 0,
+    todayPW: s.today_pw || 0,
+    todayEW: s.today_ew || 0,
+    pirates: {w: s.pirates_w||0, l: s.pirates_l||0},
+    explore: {w: s.explore_w||0, l: s.explore_l||0},
+    personal: s.personal || initPersonal(),
+    comboStats: s.combo_stats || {},
+    totalRounds: s.total_rounds || 0,
+    selectedPirates: [],
+    goldAmount: s.gold_amount || 0,
+    todayIn: s.today_in || 0,
+    todayOut: s.today_out || 0,
+    finePaid: s.fine_paid || [false,false,false,false,false,false],
+  }), [])
+
   const fetchState = useCallback(async () => {
-    const r = await fetch('/api/state')
-    const d = await r.json()
-    const s = d.state
-    if (s && s.id) {
-      setG(prev => ({
-        ...prev,
-        totalChips: s.total_chips || [0,0,0,0,0,0],
-        todayChips: s.today_chips || [0,0,0,0,0,0],
-        todayGames: s.today_games || 0,
-        todayPW: s.today_pw || 0,
-        todayEW: s.today_ew || 0,
-        pirates: {w: s.pirates_w||0, l: s.pirates_l||0},
-        explore: {w: s.explore_w||0, l: s.explore_l||0},
-        personal: s.personal || initPersonal(),
-        comboStats: s.combo_stats || {},
-        totalRounds: s.total_rounds || 0,
-        selectedPirates: prev.selectedPirates || [],
-        goldAmount: s.gold_amount || 0,
-        todayIn: s.today_in || 0,
-        todayOut: s.today_out || 0,
-        finePaid: s.fine_paid || [false,false,false,false,false,false],
-      }))
-      setManualVals(s.today_chips || [0,0,0,0,0,0])
+    // 저장 중이거나 최근 3초 이내 저장했으면 fetch 스킵 (덮어씌우기 방지)
+    if (isSaving.current) return
+    if (Date.now() - lastSaveTime.current < 3000) return
+
+    try {
+      const r = await fetch('/api/state')
+      const d = await r.json()
+      if (d.state && d.state.id) {
+        // 저장 중이 아닐 때만 상태 업데이트
+        if (!isSaving.current) {
+          setG(parseState(d.state))
+          setManualVals(d.state.today_chips || [0,0,0,0,0,0])
+        }
+        setGameLogs(d.gameLogs || [])
+        setGoldLogs(d.goldLogs || [])
+      }
+      setLoading(false)
+    } catch(e) {
+      setLoading(false)
     }
-    setGameLogs(d.gameLogs || [])
-    setGoldLogs(d.goldLogs || [])
-    setLoading(false)
-  }, [])
+  }, [parseState])
 
   useEffect(() => {
     fetchState()
@@ -86,29 +96,37 @@ export default function Home() {
   }, [fetchState])
 
   const saveState = useCallback(async (newG, gameLog = null, goldLog = null) => {
-    await fetch('/api/save', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        state: {
-          total_chips: newG.totalChips,
-          today_chips: newG.todayChips,
-          today_games: newG.todayGames,
-          today_pw: newG.todayPW,
-          today_ew: newG.todayEW,
-          pirates_w: newG.pirates.w, pirates_l: newG.pirates.l,
-          explore_w: newG.explore.w, explore_l: newG.explore.l,
-          personal: newG.personal,
-          combo_stats: newG.comboStats,
-          total_rounds: newG.totalRounds,
-          gold_amount: newG.goldAmount,
-          today_in: newG.todayIn,
-          today_out: newG.todayOut,
-          fine_paid: newG.finePaid,
-        },
-        gameLog, goldLog
+    if (isSaving.current) return // 중복 저장 방지
+    isSaving.current = true
+    lastSaveTime.current = Date.now()
+    try {
+      await fetch('/api/save', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          state: {
+            total_chips: newG.totalChips,
+            today_chips: newG.todayChips,
+            today_games: newG.todayGames,
+            today_pw: newG.todayPW,
+            today_ew: newG.todayEW,
+            pirates_w: newG.pirates.w, pirates_l: newG.pirates.l,
+            explore_w: newG.explore.w, explore_l: newG.explore.l,
+            personal: newG.personal,
+            combo_stats: newG.comboStats,
+            total_rounds: newG.totalRounds,
+            gold_amount: newG.goldAmount,
+            today_in: newG.todayIn,
+            today_out: newG.todayOut,
+            fine_paid: newG.finePaid,
+          },
+          gameLog, goldLog
+        })
       })
-    })
+    } finally {
+      isSaving.current = false
+      lastSaveTime.current = Date.now()
+    }
   }, [])
 
   function recordCombo(comboStats, idxArr, team, didWin) {
@@ -126,24 +144,17 @@ export default function Home() {
   }
 
   async function togglePirate(i) {
-    setG(prev => {
-      const sel = prev.selectedPirates || []
-      const idx = sel.indexOf(i)
-
-      if (idx >= 0) {
-        return { ...prev, selectedPirates: sel.filter(x => x !== i) }
-      }
-
-      if (sel.length >= 2) {
-        showToast('해적은 2명만 선택 가능해요')
-        return prev
-      }
-
-      return { ...prev, selectedPirates: [...sel, i] }
-    })
+    const sel = G.selectedPirates
+    const idx = sel.indexOf(i)
+    if (idx >= 0) setG(g => ({...g, selectedPirates: sel.filter(x=>x!==i)}))
+    else {
+      if (sel.length >= 2) { showToast('해적은 2명만 선택 가능해요'); return }
+      setG(g => ({...g, selectedPirates: [...sel, i]}))
+    }
   }
 
   async function submitResult(winner) {
+    if (isSaving.current) { showToast('잠깐, 저장 중이에요...'); return }
     const pirates = [...G.selectedPirates]
     const explore = [0,1,2,3,4,5].filter(i => !pirates.includes(i))
     const chipReceivers = winner === 'pirates' ? explore : pirates
@@ -151,8 +162,8 @@ export default function Home() {
 
     const newG = {...G}
     newG.totalRounds++; newG.todayGames++
-    if (winner === 'pirates') { newG.pirates = {w: G.pirates.w+1, l: G.pirates.l}; newG.explore = {w: G.explore.w, l: G.explore.l+1}; newG.todayPW++ }
-    else { newG.explore = {w: G.explore.w+1, l: G.explore.l}; newG.pirates = {w: G.pirates.w, l: G.pirates.l+1}; newG.todayEW++ }
+    if (winner === 'pirates') { newG.pirates = {w:G.pirates.w+1,l:G.pirates.l}; newG.explore = {w:G.explore.w,l:G.explore.l+1}; newG.todayPW++ }
+    else { newG.explore = {w:G.explore.w+1,l:G.explore.l}; newG.pirates = {w:G.pirates.w,l:G.pirates.l+1}; newG.todayEW++ }
 
     const tc = [...G.totalChips], dc = [...G.todayChips]
     const pers = G.personal.map(p => ({...p}))
@@ -166,7 +177,7 @@ export default function Home() {
     newG.selectedPirates = []
 
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
-    const log = {type:'game', round: newG.totalRounds, winner, time: ts, pirateIdx: pirates, exploreIdx: explore}
+    const log = {type:'game', round:newG.totalRounds, winner, time:ts, pirateIdx:pirates, exploreIdx:explore}
 
     setG(newG)
     setManualVals(dc)
@@ -175,129 +186,78 @@ export default function Home() {
     await saveState(newG, log)
   }
 
-
-  async function undoLastGame() {
-    const ok = window.confirm('방금 입력한 게임 결과를 취소할까요?')
-    if (!ok) return
-
-    const r = await fetch('/api/undo-last-game', { method: 'POST' })
-    const d = await r.json()
-
-    if (!r.ok || !d?.ok) {
-      showToast(d?.error || '되돌리기에 실패했어요')
-      return
-    }
-
-    const s = d.state || {}
-    const restored = d.restoredPirates || []
-
-    setG(prev => ({
-      ...prev,
-      totalChips: s.total_chips || [0,0,0,0,0,0],
-      todayChips: s.today_chips || [0,0,0,0,0,0],
-      todayGames: s.today_games || 0,
-      todayPW: s.today_pw || 0,
-      todayEW: s.today_ew || 0,
-      pirates: { w: s.pirates_w || 0, l: s.pirates_l || 0 },
-      explore: { w: s.explore_w || 0, l: s.explore_l || 0 },
-      personal: s.personal || initPersonal(),
-      comboStats: s.combo_stats || {},
-      totalRounds: s.total_rounds || 0,
-      selectedPirates: restored,
-      goldAmount: s.gold_amount || 0,
-      todayIn: s.today_in || 0,
-      todayOut: s.today_out || 0,
-      finePaid: s.fine_paid || [false,false,false,false,false,false],
-    }))
-    setManualVals(s.today_chips || [0,0,0,0,0,0])
-    setGameLogs(d.gameLogs || [])
-    showToast('방금 결과를 되돌렸어요')
-  }
-
-  async function resetComboStats() {
-    const ok = window.confirm('정말 조합 데이터를 모두 초기화할까요?\n이 작업은 되돌릴 수 없습니다.')
-    if (!ok) return
-
-    const newG = {
-      ...G,
-      comboStats: {},
-    }
-
-    setG(newG)
-    setComboSelected([])
-    setExploreExpanded(false)
-    setPirateExpanded(false)
-    showToast('조합 데이터 초기화 완료!')
-    await saveState(newG)
-  }
-
   async function doReset() {
+    if (isSaving.current) return
     setShowResetModal(false)
     const newG = {
       ...G,
-      totalChips: [0,0,0,0,0,0], todayChips: [0,0,0,0,0,0],
-      todayGames: 0, todayPW: 0, todayEW: 0,
-      pirates: {w:0,l:0}, explore: {w:0,l:0},
-      personal: initPersonal(),
-      todayIn: 0, todayOut: 0,
-      finePaid: [false,false,false,false,false,false],
-      selectedPirates: [],
-      totalRounds: 0,
+      totalChips:[0,0,0,0,0,0], todayChips:[0,0,0,0,0,0],
+      todayGames:0, todayPW:0, todayEW:0,
+      pirates:{w:0,l:0}, explore:{w:0,l:0},
+      personal:initPersonal(),
+      todayIn:0, todayOut:0,
+      finePaid:[false,false,false,false,false,false],
+      selectedPirates:[],
     }
     setG(newG)
     setManualVals([0,0,0,0,0,0])
     showToast('초기화 완료! (조합·금고 잔액 유지)')
     await fetch('/api/reset', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ combo_stats: G.comboStats, gold_amount: G.goldAmount, total_rounds: 0 })
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({combo_stats:G.comboStats, gold_amount:G.goldAmount})
     })
   }
 
   async function applyManual() {
+    if (isSaving.current) { showToast('잠깐, 저장 중이에요...'); return }
     const newFP = [...G.finePaid]
-    const newTC = [...manualVals]
     let changed = false
-    newTC.forEach((v,i) => { if(v !== G.todayChips[i]) { newFP[i]=false; changed=true } })
+    manualVals.forEach((v,i) => { if(v !== G.todayChips[i]) { newFP[i]=false; changed=true } })
     if (!changed) { showToast('변경사항 없음'); return }
-    const newG = {...G, todayChips: newTC, totalChips: newTC, finePaid: newFP}
+    const newG = {...G, todayChips:[...manualVals], totalChips:[...manualVals], finePaid:newFP}
     setG(newG)
-    showToast('수동 조정 완료! 벌금도 업데이트됐어요')
+    showToast('수동 조정 완료!')
     await saveState(newG)
   }
 
   async function payOneFine(i) {
+    if (isSaving.current) { showToast('잠깐, 저장 중이에요...'); return }
     const fine = Math.max(0, G.todayChips[i]) * CHIP_VAL
     if (!fine || G.finePaid[i]) return
     const newFP = [...G.finePaid]; newFP[i] = true
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
-    const log = {type:'add', label: NAMES[i]+' 벌금 납부', amount: fine, ts}
-    const newG = {...G, finePaid: newFP, goldAmount: G.goldAmount+fine, todayIn: G.todayIn+fine}
-    setG(newG); setGoldLogs(prev => [log, ...prev])
+    const log = {type:'add', label:NAMES[i]+' 벌금 납부', amount:fine, ts}
+    const newG = {...G, finePaid:newFP, goldAmount:G.goldAmount+fine, todayIn:G.todayIn+fine}
+    setG(newG)
+    setGoldLogs(prev => [log, ...prev])
     showToast(NAMES[i]+' '+won(fine)+' 납부!')
     await saveState(newG, null, log)
   }
 
   async function payAllFine() {
+    if (isSaving.current) { showToast('잠깐, 저장 중이에요...'); return }
     let total = 0, count = 0
     const newFP = [...G.finePaid]
     G.todayChips.forEach((c,i) => { const fine=Math.max(0,c)*CHIP_VAL; if(fine>0&&!G.finePaid[i]){newFP[i]=true;total+=fine;count++} })
     if (!total) { showToast('납부할 벌금이 없어요'); return }
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
     const log = {type:'add', label:'전액 납부 ('+count+'명)', amount:total, ts}
-    const newG = {...G, finePaid: newFP, goldAmount: G.goldAmount+total, todayIn: G.todayIn+total}
-    setG(newG); setGoldLogs(prev => [log, ...prev])
+    const newG = {...G, finePaid:newFP, goldAmount:G.goldAmount+total, todayIn:G.todayIn+total}
+    setG(newG)
+    setGoldLogs(prev => [log, ...prev])
     showToast('💰 '+won(total)+' 전액 납부!')
     await saveState(newG, null, log)
   }
 
   async function manualDeposit() {
+    if (isSaving.current) { showToast('잠깐, 저장 중이에요...'); return }
     const amt = parseInt(depositAmt||0)
     if (amt <= 0) { showToast('금액을 입력해주세요'); return }
     const label = depositLabel.trim() || '입금'
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
     const log = {type:'add', label, amount:amt, ts}
-    const newG = {...G, goldAmount: G.goldAmount+amt, todayIn: G.todayIn+amt}
+    const newG = {...G, goldAmount:G.goldAmount+amt, todayIn:G.todayIn+amt}
     setG(newG); setGoldLogs(prev => [log, ...prev])
     setDepositLabel(''); setDepositAmt('')
     showToast(label+' '+won(amt)+' 입금!')
@@ -305,14 +265,15 @@ export default function Home() {
   }
 
   async function spendFromGold() {
+    if (isSaving.current) { showToast('잠깐, 저장 중이에요...'); return }
     const amt = parseInt(spendAmt||0)
     if (!spendName) { showToast('이름을 선택해주세요'); return }
     if (!spendLabel.trim()) { showToast('항목을 입력해주세요'); return }
     if (amt <= 0) { showToast('금액을 입력해주세요'); return }
     if (G.goldAmount < amt) { showToast('금고 잔액이 부족해요'); return }
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
-    const log = {type:'spend', label: spendName+' — '+spendLabel.trim(), amount:amt, ts}
-    const newG = {...G, goldAmount: G.goldAmount-amt, todayOut: G.todayOut+amt}
+    const log = {type:'spend', label:spendName+' — '+spendLabel.trim(), amount:amt, ts}
+    const newG = {...G, goldAmount:G.goldAmount-amt, todayOut:G.todayOut+amt}
     setG(newG); setGoldLogs(prev => [log, ...prev])
     setSpendLabel(''); setSpendAmt(''); setSpendName(null)
     showToast(spendName+' '+spendLabel+' '+won(amt)+' 차감')
@@ -320,29 +281,29 @@ export default function Home() {
   }
 
   function renderComboRanking(entries, color, expanded, team) {
-    if (!entries.length) return <div style={{textAlign:'center',padding:'16px 0',fontSize:13,color:'var(--color-text-secondary)'}}>데이터 없음</div>
+    if (!entries.length) return <div style={{textAlign:'center',padding:'16px 0',fontSize:13,color:'#9ca3af'}}>데이터 없음</div>
     const sorted = [...entries].sort((a,b)=>(pct(b.w,b.l)??-1)-(pct(a.w,a.l)??-1))
     const visible = expanded ? sorted : sorted.slice(0,5)
     return <>
-      {visible.map((c,r)=>{
+      {visible.map((c,r) => {
         const rate = pct(c.w,c.l)
-        return <div key={r} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 0',borderBottom:'0.5px solid var(--color-border-tertiary)'}}>
-          <div style={{width:20,fontSize:12,textAlign:'center',color:'var(--color-text-secondary)',flexShrink:0}}>{r+1}</div>
+        return <div key={r} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 0',borderBottom:'0.5px solid #f5f5f5'}}>
+          <div style={{width:20,fontSize:12,textAlign:'center',color:'#9ca3af',flexShrink:0}}>{r+1}</div>
           <div style={{display:'flex',gap:4,flex:1}}>{c.idxArr.map(i=>pill(i,NAMES[i]))}</div>
           <div style={{textAlign:'right',minWidth:68}}>
             <div style={{fontSize:15,fontWeight:500,color}}>{rate!==null?rate+'%':'—'}</div>
-            <div style={{fontSize:10,color:'var(--color-text-secondary)'}}>{c.w}승 {c.l}패</div>
+            <div style={{fontSize:10,color:'#9ca3af'}}>{c.w}승 {c.l}패</div>
           </div>
         </div>
       })}
-      {sorted.length>5 && <button onClick={()=>team==='explore'?setExploreExpanded(!expanded):setPirateExpanded(!expanded)} style={{width:'100%',padding:8,border:'none',background:'none',color:'var(--color-text-secondary)',fontSize:12,cursor:'pointer',fontFamily:'inherit',marginTop:4,borderTop:'0.5px solid var(--color-border-tertiary)'}}>
+      {sorted.length>5 && <button onClick={()=>team==='explore'?setExploreExpanded(!expanded):setPirateExpanded(!expanded)} style={{width:'100%',padding:8,border:'none',background:'none',color:'#9ca3af',fontSize:12,cursor:'pointer',fontFamily:'inherit',marginTop:4,borderTop:'0.5px solid #f5f5f5'}}>
         {expanded?'▲ 접기':'▼ 더보기 ('+(sorted.length-5)+'개)'}
       </button>}
     </>
   }
 
   function ComboResult() {
-    if (comboSelected.length !== 2) return <div style={{textAlign:'center',padding:'16px 0',fontSize:13,color:'var(--color-text-secondary)'}}>두 명을 선택해주세요</div>
+    if (comboSelected.length !== 2) return <div style={{textAlign:'center',padding:'16px 0',fontSize:13,color:'#9ca3af'}}>두 명을 선택해주세요</div>
     const [a,b] = comboSelected.slice().sort((x,y)=>x-y)
     const ps = G.comboStats[a+'-'+b+':pirate']||{w:0,l:0}
     const es = G.comboStats[a+'-'+b+':explore']||{w:0,l:0}
@@ -350,9 +311,9 @@ export default function Home() {
     const totalW=ps.w+es.w, totalL=ps.l+es.l, tr=pct(totalW,totalL)
     return <>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}>
-        {pill(a,NAMES[a])}<span style={{fontSize:13,color:'var(--color-text-secondary)'}}>+</span>{pill(b,NAMES[b])}
-        <span style={{marginLeft:'auto',fontSize:14,fontWeight:500,color:'var(--color-text-primary)'}}>전체 {tr!==null?tr+'%':'—'}</span>
-        <span style={{fontSize:11,color:'var(--color-text-secondary)'}}>{totalW}승 {totalL}패</span>
+        {pill(a,NAMES[a])}<span style={{fontSize:13,color:'#9ca3af'}}>+</span>{pill(b,NAMES[b])}
+        <span style={{marginLeft:'auto',fontSize:14,fontWeight:500}}>전체 {tr!==null?tr+'%':'—'}</span>
+        <span style={{fontSize:11,color:'#9ca3af'}}>{totalW}승 {totalL}패</span>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <div style={{background:'#e1f5ee',borderRadius:10,padding:14,textAlign:'center'}}>
@@ -383,7 +344,6 @@ export default function Home() {
     </Head>
     <div style={{maxWidth:480,margin:'0 auto',fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif',background:'#f9fafb',minHeight:'100vh',position:'relative'}}>
 
-      {/* Header */}
       <div style={{background:'#fff',padding:'16px 16px 0',borderBottom:'1px solid #f0f0f0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <span style={{fontSize:17,fontWeight:500}}>🦑 크라켄</span>
@@ -399,11 +359,10 @@ export default function Home() {
         </div>
       </div>
 
-      {toast && <div style={{background:'#111',color:'#fff',padding:'10px 20px',borderRadius:100,fontSize:13,fontWeight:500,textAlign:'center',margin:'10px 16px',whiteSpace:'nowrap'}}>{toast}</div>}
+      {toast && <div style={{background:'#111',color:'#fff',padding:'10px 20px',borderRadius:100,fontSize:13,fontWeight:500,textAlign:'center',margin:'10px 16px'}}>{toast}</div>}
 
       <div style={{padding:14,paddingBottom:40}}>
 
-        {/* 기록 탭 */}
         {tab==='record' && <>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>① 이번 판 해적 2명 선택</div>
@@ -419,35 +378,28 @@ export default function Home() {
               </div>
             })}
           </div>
-          {G.selectedPirates.length===2 && <>
-            <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
-              <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>팀 구성 확인</div>
-              <div style={{display:'flex',gap:8,marginBottom:12}}>
-                <div style={{flex:1,background:'#fef2f2',borderRadius:8,padding:'8px 10px'}}>
-                  <div style={{fontSize:11,fontWeight:500,color:'#a32d2d',marginBottom:6}}>🏴‍☠️ 해적 (2명)</div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{G.selectedPirates.map(i=>pill(i,NAMES[i]))}</div>
-                </div>
-                <div style={{flex:1,background:'#e1f5ee',borderRadius:8,padding:'8px 10px'}}>
-                  <div style={{fontSize:11,fontWeight:500,color:'#085041',marginBottom:6}}>🧭 탐험대 (4명)</div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{[0,1,2,3,4,5].filter(i=>!G.selectedPirates.includes(i)).map(i=>pill(i,NAMES[i]))}</div>
-                </div>
+          {G.selectedPirates.length===2 && <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>팀 구성 확인</div>
+            <div style={{display:'flex',gap:8,marginBottom:12}}>
+              <div style={{flex:1,background:'#fef2f2',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{fontSize:11,fontWeight:500,color:'#a32d2d',marginBottom:6}}>🏴‍☠️ 해적 (2명)</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{G.selectedPirates.map(i=>pill(i,NAMES[i]))}</div>
               </div>
-              <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>② 결과 입력</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                <button onClick={()=>submitResult('pirates')} style={{padding:'16px 10px',borderRadius:10,border:'none',cursor:'pointer',background:'#fef2f2',color:'#a32d2d',fontSize:14,fontWeight:500,lineHeight:1.4}}>🏴‍☠️ 해적<br/>승리</button>
-                <button onClick={()=>submitResult('explore')} style={{padding:'16px 10px',borderRadius:10,border:'none',cursor:'pointer',background:'#e1f5ee',color:'#085041',fontSize:14,fontWeight:500,lineHeight:1.4}}>🧭 탐험대<br/>승리</button>
+              <div style={{flex:1,background:'#e1f5ee',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{fontSize:11,fontWeight:500,color:'#085041',marginBottom:6}}>🧭 탐험대 (4명)</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{[0,1,2,3,4,5].filter(i=>!G.selectedPirates.includes(i)).map(i=>pill(i,NAMES[i]))}</div>
               </div>
-              <button onClick={undoLastGame} style={{width:'100%',padding:'12px 10px',borderRadius:10,border:'0.5px solid #d1d5db',background:'#fff',color:'#374151',fontSize:13,fontWeight:500,cursor:'pointer'}}>↩️ 방금 결과 취소</button>
             </div>
-          </>}
-          {G.selectedPirates.length!==2 && <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
-            <button onClick={undoLastGame} style={{width:'100%',padding:'12px 10px',borderRadius:10,border:'0.5px solid #d1d5db',background:'#fff',color:'#374151',fontSize:13,fontWeight:500,cursor:'pointer'}}>↩️ 방금 결과 취소</button>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>② 결과 입력</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <button onClick={()=>submitResult('pirates')} style={{padding:'16px 10px',borderRadius:10,border:'none',cursor:'pointer',background:'#fef2f2',color:'#a32d2d',fontSize:14,fontWeight:500,lineHeight:1.4}}>🏴‍☠️ 해적<br/>승리</button>
+              <button onClick={()=>submitResult('explore')} style={{padding:'16px 10px',borderRadius:10,border:'none',cursor:'pointer',background:'#e1f5ee',color:'#085041',fontSize:14,fontWeight:500,lineHeight:1.4}}>🧭 탐험대<br/>승리</button>
+            </div>
           </div>}
-          {G.selectedPirates.length===0 && <div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>해적 2명을 선택해주세요</div>}
-          {G.selectedPirates.length===1 && <div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>{NAMES[G.selectedPirates[0]]} 선택됨 — 1명 더 선택하세요</div>}
+          {G.selectedPirates.length===0&&<div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>해적 2명을 선택해주세요</div>}
+          {G.selectedPirates.length===1&&<div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>{NAMES[G.selectedPirates[0]]} 선택됨 — 1명 더 선택하세요</div>}
         </>}
 
-        {/* 오늘 탭 */}
         {tab==='today' && <div style={{background:'#fff',borderRadius:12,padding:14,border:'1px solid #f0f0f0'}}>
           <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 현황</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
@@ -472,19 +424,16 @@ export default function Home() {
           </div>
         </div>}
 
-        {/* 통계 탭 */}
         {tab==='stats' && <>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>팀 승률</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               {[['🏴‍☠️ 해적',G.pirates,'#a32d2d','#e24b4a'],['🧭 탐험대',G.explore,'#085041','#1d9e75']].map(([label,data,color,bar])=>{
-                const rate = pct(data.w,data.l)||0
+                const rate=pct(data.w,data.l)||0
                 return <div key={label}>
                   <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>{label}</div>
                   <div style={{fontSize:26,fontWeight:500,color}}>{rate}%</div>
-                  <div style={{height:5,borderRadius:3,background:'#f3f4f6',overflow:'hidden',margin:'4px 0'}}>
-                    <div style={{height:'100%',borderRadius:3,background:bar,width:rate+'%',transition:'width .4s'}}/>
-                  </div>
+                  <div style={{height:5,borderRadius:3,background:'#f3f4f6',overflow:'hidden',margin:'4px 0'}}><div style={{height:'100%',borderRadius:3,background:bar,width:rate+'%'}}/></div>
                   <div style={{fontSize:11,color:'#9ca3af'}}>{data.w}승 {data.l}패</div>
                 </div>
               })}
@@ -509,26 +458,7 @@ export default function Home() {
           </div>
         </>}
 
-        {/* 조합 탭 */}
         {tab==='combo' && <>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase'}}>조합 통계</div>
-            <button
-              onClick={resetComboStats}
-              style={{
-                padding:'7px 12px',
-                borderRadius:8,
-                border:'0.5px solid #fca5a5',
-                background:'none',
-                color:'#a32d2d',
-                fontSize:12,
-                fontWeight:500,
-                cursor:'pointer'
-              }}
-            >
-              조합 초기화
-            </button>
-          </div>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>2명 선택 → 조합 승률</div>
             <div style={{fontSize:12,color:'#6b7280',marginBottom:12,padding:'8px 10px',background:'#f9fafb',borderRadius:8}}>두 명을 탭하면 전체/탐험대/해적 승률이 나와요</div>
@@ -539,7 +469,7 @@ export default function Home() {
                   const idx=comboSelected.indexOf(i)
                   if(idx>=0) setComboSelected(comboSelected.filter(x=>x!==i))
                   else setComboSelected(prev=>prev.length>=2?[prev[1],i]:[...prev,i])
-                }} style={{padding:'9px 0',borderRadius:20,fontSize:13,fontWeight:500,cursor:'pointer',border:sel?`3px solid ${FG[i]}`:'2px solid transparent',background:BG[i],color:FG[i],textAlign:'center',outline:'none'}}>{n}</button>
+                }} style={{padding:'9px 0',borderRadius:20,fontSize:13,fontWeight:500,cursor:'pointer',border:sel?`3px solid ${FG[i]}`:'2px solid transparent',background:BG[i],color:FG[i],textAlign:'center'}}>{n}</button>
               })}
             </div>
             <ComboResult/>
@@ -554,7 +484,6 @@ export default function Home() {
           </div>
         </>}
 
-        {/* 수동 탭 */}
         {tab==='manual' && <>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>칩 수동 조정</div>
@@ -576,14 +505,12 @@ export default function Home() {
             {NAMES.map((n,i)=>{
               const c=G.todayChips[i]
               return <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<5?'0.5px solid #f5f5f5':'none'}}>
-                {pill(i,n)}
-                <span style={{fontSize:14,fontWeight:500,color:c>0?'#a32d2d':'#9ca3af',marginLeft:'auto'}}>{c} 칩</span>
+                {pill(i,n)}<span style={{fontSize:14,fontWeight:500,color:c>0?'#a32d2d':'#9ca3af',marginLeft:'auto'}}>{c} 칩</span>
               </div>
             })}
           </div>
         </>}
 
-        {/* 금고 탭 */}
         {tab==='gold' && <>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
             {[['💰 총 잔액',G.goldAmount,'#92400e','#fffbeb','#fcd34d'],['📥 오늘 입금',G.todayIn,'#085041','#e1f5ee','#6ee7b7'],['📤 오늘 출금',G.todayOut,'#a32d2d','#fef2f2','#fca5a5']].map(([l,v,c,bg,bc])=>(
@@ -603,7 +530,6 @@ export default function Home() {
           </div>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>💸 오늘 벌금 납부</div>
-            <div style={{fontSize:12,color:'#6b7280',marginBottom:12,padding:'8px 10px',background:'#f9fafb',borderRadius:8}}>칩이 많은 사람이 벌금 대상이에요</div>
             {fineSorted.map(p=>{
               const fine=Math.max(0,p.c)*CHIP_VAL,paid=G.finePaid[p.i]
               return <div key={p.i} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'0.5px solid #f5f5f5'}}>
@@ -648,7 +574,6 @@ export default function Home() {
 
       </div>
 
-      {/* 초기화 확인 모달 */}
       {showResetModal && <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.4)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,zIndex:999}}>
         <div style={{background:'#fff',borderRadius:12,padding:20,width:'100%',maxWidth:340}}>
           <div style={{fontSize:15,fontWeight:500,marginBottom:8}}>칩 초기화</div>
