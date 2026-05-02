@@ -27,12 +27,15 @@ export default function Home() {
   const lastSaveTime = useRef(0)
   const selectedPiratesRef = useRef([])
 
+  // 해적 선택은 별도 state — fetch가 절대 못 건드리게
+  const [selectedPirates, setSelectedPirates] = useState([])
+
   const [G, setG] = useState({
     totalChips: [0,0,0,0,0,0], todayChips: [0,0,0,0,0,0],
     todayGames: 0, todayPW: 0, todayEW: 0,
     pirates: {w:0,l:0}, explore: {w:0,l:0},
     personal: initPersonal(), comboStats: {}, totalRounds: 0,
-    selectedPirates: [], goldAmount: 0, todayIn: 0, todayOut: 0,
+    goldAmount: 0, todayIn: 0, todayOut: 0,
     finePaid: [false,false,false,false,false,false],
   })
   const [gameLogs, setGameLogs] = useState([])
@@ -60,7 +63,6 @@ export default function Home() {
     personal: s.personal || initPersonal(),
     comboStats: s.combo_stats || {},
     totalRounds: s.total_rounds || 0,
-    selectedPirates: [],
     goldAmount: s.gold_amount || 0,
     todayIn: s.today_in || 0,
     todayOut: s.today_out || 0,
@@ -145,23 +147,23 @@ export default function Home() {
   }
 
   async function togglePirate(i) {
-    const sel = G.selectedPirates
+    const sel = selectedPirates
     const idx = sel.indexOf(i)
     if (idx >= 0) {
       const next = sel.filter(x=>x!==i)
       selectedPiratesRef.current = next
-      setG(g => ({...g, selectedPirates: next}))
+      setSelectedPirates(next)
     } else {
       if (sel.length >= 2) { showToast('해적은 2명만 선택 가능해요'); return }
       const next = [...sel, i]
       selectedPiratesRef.current = next
-      setG(g => ({...g, selectedPirates: next}))
+      setSelectedPirates(next)
     }
   }
 
   async function submitResult(winner) {
     if (isSaving.current) { showToast('잠깐, 저장 중이에요...'); return }
-    const pirates = [...G.selectedPirates]
+    const pirates = [...selectedPirates]
     const explore = [0,1,2,3,4,5].filter(i => !pirates.includes(i))
     const chipReceivers = winner === 'pirates' ? explore : pirates
     const chipLosers = winner === 'pirates' ? pirates : explore
@@ -180,13 +182,13 @@ export default function Home() {
     cs = recordExplorePairs(cs, explore, winner==='explore')
 
     newG.totalChips = tc; newG.todayChips = dc; newG.personal = pers; newG.comboStats = cs
-    newG.selectedPirates = []
 
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
     const log = {type:'game', round:newG.totalRounds, winner, time:ts, pirateIdx:pirates, exploreIdx:explore}
 
     setG(newG)
     setManualVals(dc)
+    setSelectedPirates([])
     selectedPiratesRef.current = []
     showToast((winner==='pirates'?'🏴‍☠️ 해적 승리':'🧭 탐험대 승리') + ' — 진 팀 +3칩')
     await saveState(newG, log)
@@ -208,9 +210,10 @@ export default function Home() {
       personal:initPersonal(),
       todayIn:0, todayOut:0,
       finePaid:[false,false,false,false,false,false],
-      selectedPirates:[],
     }
     setG(newG)
+    setSelectedPirates([])
+    selectedPiratesRef.current = []
     setManualVals([0,0,0,0,0,0])
     showToast('초기화 완료! (조합·금고 잔액 유지)')
     await fetch('/api/reset', {
@@ -393,8 +396,8 @@ export default function Home() {
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>① 이번 판 해적 2명 선택</div>
             <div style={{fontSize:12,color:'#6b7280',marginBottom:12,padding:'8px 10px',background:'#f9fafb',borderRadius:8}}>해적 2명 탭 → 나머지 4명 자동으로 탐험대</div>
             {NAMES.map((n,i)=>{
-              const isPirate=G.selectedPirates.includes(i)
-              const isExplore=G.selectedPirates.length===2&&!isPirate
+              const isPirate=selectedPirates.includes(i)
+              const isExplore=selectedPirates.length===2&&!isPirate
               return <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:24,padding:'10px 0',borderBottom:i<5?'0.5px solid #f5f5f5':'none'}}>
                 {pill(i,n)}
                 {isPirate?<button onClick={()=>togglePirate(i)} style={{padding:'8px 18px',borderRadius:8,border:'none',background:'#fef2f2',color:'#a32d2d',fontSize:13,fontWeight:500,cursor:'pointer'}}>🏴‍☠️ 해적</button>
@@ -403,16 +406,16 @@ export default function Home() {
               </div>
             })}
           </div>
-          {G.selectedPirates.length===2 && <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
+          {selectedPirates.length===2 && <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>팀 구성 확인</div>
             <div style={{display:'flex',gap:8,marginBottom:12}}>
               <div style={{flex:1,background:'#fef2f2',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:11,fontWeight:500,color:'#a32d2d',marginBottom:6}}>🏴‍☠️ 해적 (2명)</div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{G.selectedPirates.map(i=>pill(i,NAMES[i]))}</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{selectedPirates.map(i=>pill(i,NAMES[i]))}</div>
               </div>
               <div style={{flex:1,background:'#e1f5ee',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:11,fontWeight:500,color:'#085041',marginBottom:6}}>🧭 탐험대 (4명)</div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{[0,1,2,3,4,5].filter(i=>!G.selectedPirates.includes(i)).map(i=>pill(i,NAMES[i]))}</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{[0,1,2,3,4,5].filter(i=>!selectedPirates.includes(i)).map(i=>pill(i,NAMES[i]))}</div>
               </div>
             </div>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>② 결과 입력</div>
@@ -421,8 +424,8 @@ export default function Home() {
               <button onClick={()=>submitResult('explore')} style={{padding:'16px 10px',borderRadius:10,border:'none',cursor:'pointer',background:'#e1f5ee',color:'#085041',fontSize:14,fontWeight:500,lineHeight:1.4}}>🧭 탐험대<br/>승리</button>
             </div>
           </div>}
-          {G.selectedPirates.length===0&&<div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>해적 2명을 선택해주세요</div>}
-          {G.selectedPirates.length===1&&<div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>{NAMES[G.selectedPirates[0]]} 선택됨 — 1명 더 선택하세요</div>}
+          {selectedPirates.length===0&&<div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>해적 2명을 선택해주세요</div>}
+          {selectedPirates.length===1&&<div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>{NAMES[selectedPirates[0]]} 선택됨 — 1명 더 선택하세요</div>}
         </>}
 
         {tab==='today' && <div style={{background:'#fff',borderRadius:12,padding:14,border:'1px solid #f0f0f0'}}>
