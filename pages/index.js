@@ -310,7 +310,12 @@ export default function Home() {
 
   function renderComboRanking(entries, color, expanded, team) {
     if (!entries.length) return <div style={{textAlign:'center',padding:'16px 0',fontSize:13,color:'#9ca3af'}}>데이터 없음</div>
-    const sorted = [...entries].sort((a,b)=>(pct(b.w,b.l)??-1)-(pct(a.w,a.l)??-1))
+    const sorted = [...entries].sort((a,b)=>{
+      const ra = pct(a.w,a.l) ?? -1
+      const rb = pct(b.w,b.l) ?? -1
+      if (rb !== ra) return rb - ra  // 승률 높은 순
+      return b.w - a.w  // 승률 동일 시 승수 많은 순
+    })
     const visible = expanded ? sorted : sorted.slice(0,5)
     return <>
       {visible.map((c,r) => {
