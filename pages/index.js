@@ -34,7 +34,12 @@ export default function Home() {
     totalChips: [0,0,0,0,0,0], todayChips: [0,0,0,0,0,0],
     todayGames: 0, todayPW: 0, todayEW: 0,
     pirates: {w:0,l:0}, explore: {w:0,l:0},
-    personal: initPersonal(), comboStats: {}, totalRounds: 0,
+    personal: initPersonal(),
+    // 누적 — 초기화에 영향받지 않음
+    cumPirates: {w:0,l:0}, cumExplore: {w:0,l:0},
+    cumPersonal: initPersonal(),
+    cumGames: 0,
+    comboStats: {}, totalRounds: 0,
     goldAmount: 0, todayIn: 0, todayOut: 0,
     finePaid: [false,false,false,false,false,false],
   })
@@ -61,6 +66,10 @@ export default function Home() {
     pirates: {w: s.pirates_w||0, l: s.pirates_l||0},
     explore: {w: s.explore_w||0, l: s.explore_l||0},
     personal: s.personal || initPersonal(),
+    cumPirates: {w: s.cum_pirates_w||0, l: s.cum_pirates_l||0},
+    cumExplore: {w: s.cum_explore_w||0, l: s.cum_explore_l||0},
+    cumPersonal: s.cum_personal || initPersonal(),
+    cumGames: s.cum_games || 0,
     comboStats: s.combo_stats || {},
     totalRounds: s.total_rounds || 0,
     goldAmount: s.gold_amount || 0,
@@ -116,6 +125,10 @@ export default function Home() {
             pirates_w: newG.pirates.w, pirates_l: newG.pirates.l,
             explore_w: newG.explore.w, explore_l: newG.explore.l,
             personal: newG.personal,
+            cum_pirates_w: newG.cumPirates.w, cum_pirates_l: newG.cumPirates.l,
+            cum_explore_w: newG.cumExplore.w, cum_explore_l: newG.cumExplore.l,
+            cum_personal: newG.cumPersonal,
+            cum_games: newG.cumGames,
             combo_stats: newG.comboStats,
             total_rounds: newG.totalRounds,
             gold_amount: newG.goldAmount,
@@ -169,19 +182,38 @@ export default function Home() {
     const chipLosers = winner === 'pirates' ? pirates : explore
 
     const newG = {...G}
-    newG.totalRounds++; newG.todayGames++
-    if (winner === 'pirates') { newG.pirates = {w:G.pirates.w+1,l:G.pirates.l}; newG.explore = {w:G.explore.w,l:G.explore.l+1}; newG.todayPW++ }
-    else { newG.explore = {w:G.explore.w+1,l:G.explore.l}; newG.pirates = {w:G.pirates.w,l:G.pirates.l+1}; newG.todayEW++ }
+    newG.totalRounds++; newG.todayGames++; newG.cumGames = (G.cumGames||0)+1
+    if (winner === 'pirates') {
+      newG.pirates = {w:G.pirates.w+1,l:G.pirates.l}
+      newG.explore = {w:G.explore.w,l:G.explore.l+1}
+      newG.cumPirates = {w:(G.cumPirates?.w||0)+1, l:(G.cumPirates?.l||0)}
+      newG.cumExplore = {w:(G.cumExplore?.w||0), l:(G.cumExplore?.l||0)+1}
+      newG.todayPW++
+    } else {
+      newG.explore = {w:G.explore.w+1,l:G.explore.l}
+      newG.pirates = {w:G.pirates.w,l:G.pirates.l+1}
+      newG.cumExplore = {w:(G.cumExplore?.w||0)+1, l:(G.cumExplore?.l||0)}
+      newG.cumPirates = {w:(G.cumPirates?.w||0), l:(G.cumPirates?.l||0)+1}
+      newG.todayEW++
+    }
 
     const tc = [...G.totalChips], dc = [...G.todayChips]
     const pers = G.personal.map(p => ({...p}))
-    chipReceivers.forEach(i => { tc[i]+=3; dc[i]+=3; if(pirates.includes(i)) pers[i].pl++; else pers[i].el++ })
-    chipLosers.forEach(i => { if(pirates.includes(i)) pers[i].pw++; else pers[i].ew++ })
+    const cumPers = (G.cumPersonal || initPersonal()).map(p => ({...p}))
+    chipReceivers.forEach(i => {
+      tc[i]+=3; dc[i]+=3
+      if(pirates.includes(i)) { pers[i].pl++; cumPers[i].pl++ }
+      else { pers[i].el++; cumPers[i].el++ }
+    })
+    chipLosers.forEach(i => {
+      if(pirates.includes(i)) { pers[i].pw++; cumPers[i].pw++ }
+      else { pers[i].ew++; cumPers[i].ew++ }
+    })
 
     let cs = recordCombo({...G.comboStats}, pirates, 'pirate', winner==='pirates')
     cs = recordExplorePairs(cs, explore, winner==='explore')
 
-    newG.totalChips = tc; newG.todayChips = dc; newG.personal = pers; newG.comboStats = cs
+    newG.totalChips = tc; newG.todayChips = dc; newG.personal = pers; newG.cumPersonal = cumPers; newG.comboStats = cs
 
     const ts = new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
     const log = {type:'game', round:newG.totalRounds, winner, time:ts, pirateIdx:pirates, exploreIdx:explore}
@@ -219,7 +251,16 @@ export default function Home() {
     await fetch('/api/reset', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({combo_stats:G.comboStats, gold_amount:G.goldAmount})
+      body:JSON.stringify({
+        combo_stats: G.comboStats,
+        gold_amount: G.goldAmount,
+        cum_pirates_w: G.cumPirates?.w||0,
+        cum_pirates_l: G.cumPirates?.l||0,
+        cum_explore_w: G.cumExplore?.w||0,
+        cum_explore_l: G.cumExplore?.l||0,
+        cum_personal: G.cumPersonal||initPersonal(),
+        cum_games: G.cumGames||0,
+      })
     })
   }
 
@@ -458,6 +499,8 @@ export default function Home() {
         </div>}
 
         {tab==='stats' && <>
+          {/* 오늘 섹션 */}
+          <div style={{fontSize:13,fontWeight:500,color:'#111',marginBottom:8,paddingLeft:2}}>📅 오늘</div>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>팀 승률</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
@@ -472,10 +515,44 @@ export default function Home() {
               })}
             </div>
           </div>
-          <div style={{background:'#fff',borderRadius:12,padding:14,border:'1px solid #f0f0f0'}}>
-            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>개인별 승률</div>
+          <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:20,border:'1px solid #f0f0f0'}}>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 개인별 승률</div>
             {NAMES.map((n,i)=>{
               const p=G.personal[i],tw=p.pw+p.ew,tl=p.pl+p.el
+              const tr=pct(tw,tl),pr2=pct(p.pw,p.pl),er2=pct(p.ew,p.el)
+              return <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:i<5?'0.5px solid #f5f5f5':'none'}}>
+                <div style={{flexShrink:0,paddingTop:2}}>{pill(i,n)}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,marginBottom:6}}>전체 {tr!==null?tr+'%':'—'} <span style={{fontSize:11,color:'#9ca3af',fontWeight:400}}>{tw}승 {tl}패</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:2}}><span style={{color:'#a32d2d',fontWeight:500}}>🏴‍☠️ 해적 {pr2!==null?pr2+'%':'—'}</span><span style={{color:'#9ca3af'}}>{p.pw}승 {p.pl}패</span></div>
+                  <div style={{height:4,borderRadius:2,background:'#f3f4f6',overflow:'hidden',marginBottom:5}}><div style={{height:'100%',borderRadius:2,background:'#e24b4a',width:(pr2||0)+'%'}}/></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:2}}><span style={{color:'#085041',fontWeight:500}}>🧭 탐험대 {er2!==null?er2+'%':'—'}</span><span style={{color:'#9ca3af'}}>{p.ew}승 {p.el}패</span></div>
+                  <div style={{height:4,borderRadius:2,background:'#f3f4f6',overflow:'hidden'}}><div style={{height:'100%',borderRadius:2,background:'#1d9e75',width:(er2||0)+'%'}}/></div>
+                </div>
+              </div>
+            })}
+          </div>
+
+          {/* 누적 섹션 */}
+          <div style={{fontSize:13,fontWeight:500,color:'#111',marginBottom:8,paddingLeft:2}}>📊 누적 (전체 기간)</div>
+          <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>누적 팀 승률 ({G.cumGames||0}판)</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              {[['🏴‍☠️ 해적',G.cumPirates||{w:0,l:0},'#a32d2d','#e24b4a'],['🧭 탐험대',G.cumExplore||{w:0,l:0},'#085041','#1d9e75']].map(([label,data,color,bar])=>{
+                const rate=pct(data.w,data.l)||0
+                return <div key={label}>
+                  <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>{label}</div>
+                  <div style={{fontSize:26,fontWeight:500,color}}>{rate}%</div>
+                  <div style={{height:5,borderRadius:3,background:'#f3f4f6',overflow:'hidden',margin:'4px 0'}}><div style={{height:'100%',borderRadius:3,background:bar,width:rate+'%'}}/></div>
+                  <div style={{fontSize:11,color:'#9ca3af'}}>{data.w}승 {data.l}패</div>
+                </div>
+              })}
+            </div>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,padding:14,border:'1px solid #f0f0f0'}}>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>누적 개인별 승률</div>
+            {NAMES.map((n,i)=>{
+              const p=(G.cumPersonal||initPersonal())[i],tw=p.pw+p.ew,tl=p.pl+p.el
               const tr=pct(tw,tl),pr2=pct(p.pw,p.pl),er2=pct(p.ew,p.el)
               return <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:i<5?'0.5px solid #f5f5f5':'none'}}>
                 <div style={{flexShrink:0,paddingTop:2}}>{pill(i,n)}</div>
