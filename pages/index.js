@@ -491,35 +491,33 @@ export default function Home() {
           {selectedPirates.length===1&&<div style={{textAlign:'center',padding:'12px 0',fontSize:13,color:'#9ca3af'}}>{NAMES[selectedPirates[0]]} 선택됨 — 1명 더 선택하세요</div>}
         </>}
 
-        {tab==='today' && <div style={{background:'#fff',borderRadius:12,padding:14,border:'1px solid #f0f0f0'}}>
-          <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 현황</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-            {[['총 게임',G.todayGames,null],['🏴‍☠️ 해적 승',G.todayPW,'#a32d2d'],['🧭 탐험대 승',G.todayEW,'#085041']].map(([l,v,c])=>(
-              <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'10px 8px',textAlign:'center'}}>
-                <div style={{fontSize:11,color:'#9ca3af',marginBottom:2}}>{l}</div>
-                <div style={{fontSize:20,fontWeight:500,color:c||'#111'}}>{v}</div>
+        {tab==='today' && <>
+          <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 현황</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
+              {[['총 게임',G.todayGames,null],['🏴‍☠️ 해적 승',G.todayPW,'#a32d2d'],['🧭 탐험대 승',G.todayEW,'#085041']].map(([l,v,c])=>(
+                <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'10px 8px',textAlign:'center'}}>
+                  <div style={{fontSize:11,color:'#9ca3af',marginBottom:2}}>{l}</div>
+                  <div style={{fontSize:20,fontWeight:500,color:c||'#111'}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 칩 (많을수록 벌금)</div>
+            {todaySorted.map(p=>(
+              <div key={p.i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'0.5px solid #f5f5f5'}}>
+                {pill(p.i,p.n)}
+                <span style={{fontSize:14,fontWeight:500,color:p.c>0?'#a32d2d':'#9ca3af',minWidth:40,textAlign:'right'}}>{p.c}</span>
+                {p.c>0&&<span style={{fontSize:10,background:'#fcebeb',color:'#a32d2d',borderRadius:5,padding:'2px 6px',fontWeight:500}}>벌금</span>}
               </div>
             ))}
-          </div>
-          <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 칩 (많을수록 벌금)</div>
-          {todaySorted.map(p=>(
-            <div key={p.i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'0.5px solid #f5f5f5'}}>
-              {pill(p.i,p.n)}
-              <span style={{fontSize:14,fontWeight:500,color:p.c>0?'#a32d2d':'#9ca3af',minWidth:40,textAlign:'right'}}>{p.c}</span>
-              {p.c>0&&<span style={{fontSize:10,background:'#fcebeb',color:'#a32d2d',borderRadius:5,padding:'2px 6px',fontWeight:500}}>벌금</span>}
+            <div style={{marginTop:10,padding:'10px 12px',background:'#fcebeb',borderRadius:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontSize:12,fontWeight:500,color:'#a32d2d'}}>오늘 총 벌금</span>
+              <span style={{fontSize:16,fontWeight:500,color:'#a32d2d'}}>{G.todayChips.reduce((s,c)=>s+Math.max(0,c),0)} 칩</span>
             </div>
-          ))}
-          <div style={{marginTop:10,padding:'10px 12px',background:'#fcebeb',borderRadius:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span style={{fontSize:12,fontWeight:500,color:'#a32d2d'}}>오늘 총 벌금</span>
-            <span style={{fontSize:16,fontWeight:500,color:'#a32d2d'}}>{G.todayChips.reduce((s,c)=>s+Math.max(0,c),0)} 칩</span>
           </div>
-        </div>}
 
-        {tab==='stats' && <>
-          {/* 오늘 섹션 */}
-          <div style={{fontSize:13,fontWeight:500,color:'#111',marginBottom:8,paddingLeft:2}}>📅 오늘</div>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
-            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>팀 승률</div>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 팀 승률</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               {[['🏴‍☠️ 해적',G.pirates,'#a32d2d','#e24b4a'],['🧭 탐험대',G.explore,'#085041','#1d9e75']].map(([label,data,color,bar])=>{
                 const rate=pct(data.w,data.l)||0
@@ -532,7 +530,8 @@ export default function Home() {
               })}
             </div>
           </div>
-          <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:20,border:'1px solid #f0f0f0'}}>
+
+          <div style={{background:'#fff',borderRadius:12,padding:14,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>오늘 개인별 승률</div>
             {NAMES.map((n,i)=>{
               const p=G.personal[i],tw=p.pw+p.ew,tl=p.pl+p.el
@@ -549,7 +548,9 @@ export default function Home() {
               </div>
             })}
           </div>
+        </>}
 
+        {tab==='stats' && <>
           {/* 누적 섹션 */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingLeft:2}}>
             <div style={{fontSize:13,fontWeight:500,color:'#111'}}>📊 누적 (전체 기간)</div>
