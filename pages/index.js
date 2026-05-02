@@ -25,6 +25,7 @@ export default function Home() {
   // 저장 중 여부 — 중복 방지 핵심
   const isSaving = useRef(false)
   const lastSaveTime = useRef(0)
+  const selectedPiratesRef = useRef([])
 
   const [G, setG] = useState({
     totalChips: [0,0,0,0,0,0], todayChips: [0,0,0,0,0,0],
@@ -70,7 +71,7 @@ export default function Home() {
     // 저장 중, 최근 10초 이내 저장, 해적 선택 중이면 fetch 스킵
     if (isSaving.current) return
     if (Date.now() - lastSaveTime.current < 10000) return
-    if (G.selectedPirates.length > 0) return
+    if (selectedPiratesRef.current.length > 0) return
 
     try {
       const r = await fetch('/api/state')
@@ -147,10 +148,15 @@ export default function Home() {
   async function togglePirate(i) {
     const sel = G.selectedPirates
     const idx = sel.indexOf(i)
-    if (idx >= 0) setG(g => ({...g, selectedPirates: sel.filter(x=>x!==i)}))
-    else {
+    if (idx >= 0) {
+      const next = sel.filter(x=>x!==i)
+      selectedPiratesRef.current = next
+      setG(g => ({...g, selectedPirates: next}))
+    } else {
       if (sel.length >= 2) { showToast('해적은 2명만 선택 가능해요'); return }
-      setG(g => ({...g, selectedPirates: [...sel, i]}))
+      const next = [...sel, i]
+      selectedPiratesRef.current = next
+      setG(g => ({...g, selectedPirates: next}))
     }
   }
 
@@ -182,6 +188,7 @@ export default function Home() {
 
     setG(newG)
     setManualVals(dc)
+    selectedPiratesRef.current = []
     setGameLogs(prev => [log, ...prev])
     showToast((winner==='pirates'?'🏴‍☠️ 해적 승리':'🧭 탐험대 승리') + ' — 진 팀 +3칩')
     await saveState(newG, log)
