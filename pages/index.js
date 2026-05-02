@@ -18,6 +18,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
   const [showResetModal, setShowResetModal] = useState(false)
+  const [showCumResetModal, setShowCumResetModal] = useState(false)
+  const [rankType, setRankType] = useState(null) // null | 'total' | 'pirate' | 'explore'
   const [comboSelected, setComboSelected] = useState([])
   const [exploreExpanded, setExploreExpanded] = useState(false)
   const [pirateExpanded, setPirateExpanded] = useState(false)
@@ -262,6 +264,21 @@ export default function Home() {
         cum_games: G.cumGames||0,
       })
     })
+  }
+
+  async function doCumReset() {
+    if (isSaving.current) return
+    setShowCumResetModal(false)
+    const newG = {
+      ...G,
+      cumPirates: {w:0,l:0},
+      cumExplore: {w:0,l:0},
+      cumPersonal: initPersonal(),
+      cumGames: 0,
+    }
+    setG(newG)
+    showToast('누적 초기화 완료!')
+    await saveState(newG)
   }
 
   async function applyManual() {
@@ -534,7 +551,10 @@ export default function Home() {
           </div>
 
           {/* 누적 섹션 */}
-          <div style={{fontSize:13,fontWeight:500,color:'#111',marginBottom:8,paddingLeft:2}}>📊 누적 (전체 기간)</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingLeft:2}}>
+            <div style={{fontSize:13,fontWeight:500,color:'#111'}}>📊 누적 (전체 기간)</div>
+            <button onClick={()=>setShowCumResetModal(true)} style={{padding:'5px 10px',borderRadius:6,border:'0.5px solid #fca5a5',background:'none',color:'#a32d2d',fontSize:11,fontWeight:500,cursor:'pointer'}}>누적 초기화</button>
+          </div>
           <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>누적 팀 승률 ({G.cumGames||0}판)</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
@@ -549,6 +569,43 @@ export default function Home() {
               })}
             </div>
           </div>
+          <div style={{background:'#fff',borderRadius:12,padding:14,marginBottom:12,border:'1px solid #f0f0f0'}}>
+            <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>승률 순위 보기</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+              {[['total','전체','#111','#f3f4f6'],['pirate','🏴‍☠️ 해적','#a32d2d','#fef2f2'],['explore','🧭 탐험대','#085041','#e1f5ee']].map(([type,label,fg,bg])=>(
+                <button key={type} onClick={()=>setRankType(rankType===type?null:type)} style={{padding:'9px 0',borderRadius:8,fontSize:12,fontWeight:500,cursor:'pointer',border:rankType===type?`2px solid ${fg}`:'0.5px solid #e5e7eb',background:rankType===type?bg:'#fff',color:fg}}>{label}</button>
+              ))}
+            </div>
+            {rankType && <div style={{marginTop:12}}>
+              {(()=>{
+                const cumP = G.cumPersonal||initPersonal()
+                const entries = NAMES.map((n,i)=>{
+                  const p = cumP[i]
+                  let w, l
+                  if (rankType==='total') { w = p.pw+p.ew; l = p.pl+p.el }
+                  else if (rankType==='pirate') { w = p.pw; l = p.pl }
+                  else { w = p.ew; l = p.el }
+                  return {n, i, w, l, rate: pct(w,l)}
+                }).sort((a,b)=>{
+                  const ra = a.rate ?? -1, rb = b.rate ?? -1
+                  if (rb !== ra) return rb - ra
+                  return b.w - a.w
+                })
+                const color = rankType==='total'?'#111':rankType==='pirate'?'#a32d2d':'#085041'
+                return entries.map((e,r)=>(
+                  <div key={e.i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:r<5?'0.5px solid #f5f5f5':'none'}}>
+                    <div style={{width:22,fontSize:13,fontWeight:500,textAlign:'center',color:r===0?'#d97706':r===1?'#9ca3af':r===2?'#a16207':'#9ca3af'}}>{r+1}</div>
+                    {pill(e.i,e.n)}
+                    <div style={{flex:1,textAlign:'right'}}>
+                      <span style={{fontSize:15,fontWeight:500,color}}>{e.rate!==null?e.rate+'%':'—'}</span>
+                      <span style={{fontSize:11,color:'#9ca3af',marginLeft:8}}>{e.w}승 {e.l}패</span>
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>}
+          </div>
+
           <div style={{background:'#fff',borderRadius:12,padding:14,border:'1px solid #f0f0f0'}}>
             <div style={{fontSize:11,color:'#9ca3af',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',marginBottom:10}}>누적 개인별 승률</div>
             {NAMES.map((n,i)=>{
@@ -691,6 +748,17 @@ export default function Home() {
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <button onClick={()=>setShowResetModal(false)} style={{padding:11,borderRadius:8,border:'0.5px solid #e5e7eb',background:'none',fontSize:13,cursor:'pointer'}}>취소</button>
             <button onClick={doReset} style={{padding:11,borderRadius:8,border:'none',background:'#fef2f2',color:'#a32d2d',fontSize:13,fontWeight:500,cursor:'pointer'}}>초기화</button>
+          </div>
+        </div>
+      </div>}
+
+      {showCumResetModal && <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.4)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,zIndex:999}}>
+        <div style={{background:'#fff',borderRadius:12,padding:20,width:'100%',maxWidth:340}}>
+          <div style={{fontSize:15,fontWeight:500,marginBottom:8,color:'#a32d2d'}}>⚠️ 누적 초기화</div>
+          <div style={{fontSize:13,color:'#6b7280',marginBottom:20,lineHeight:1.5}}>지금까지의 <b>모든 누적 승률</b>이 0으로 초기화돼요.<br/>(오늘 데이터, 조합, 금고 잔액은 유지)<br/><br/>정말 진행하시겠어요?</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <button onClick={()=>setShowCumResetModal(false)} style={{padding:11,borderRadius:8,border:'0.5px solid #e5e7eb',background:'none',fontSize:13,cursor:'pointer'}}>취소</button>
+            <button onClick={doCumReset} style={{padding:11,borderRadius:8,border:'none',background:'#fef2f2',color:'#a32d2d',fontSize:13,fontWeight:500,cursor:'pointer'}}>누적 초기화</button>
           </div>
         </div>
       </div>}
