@@ -67,9 +67,10 @@ export default function Home() {
   }), [])
 
   const fetchState = useCallback(async () => {
-    // 저장 중이거나 최근 3초 이내 저장했으면 fetch 스킵 (덮어씌우기 방지)
+    // 저장 중, 최근 10초 이내 저장, 해적 선택 중이면 fetch 스킵
     if (isSaving.current) return
-    if (Date.now() - lastSaveTime.current < 3000) return
+    if (Date.now() - lastSaveTime.current < 10000) return
+    if (G.selectedPirates.length > 0) return
 
     try {
       const r = await fetch('/api/state')
